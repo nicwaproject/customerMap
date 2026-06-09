@@ -29,16 +29,18 @@ export default function Sidebar({
   return (
     <aside
       className={[
-        'pointer-events-auto absolute right-0 top-0 z-[1000] h-full w-[320px] max-w-[92vw]',
-        'border-l bg-white shadow-xl',
+        'pointer-events-auto fixed inset-x-0 bottom-0 z-[1000]',
+        'h-[min(88dvh,720px)] w-full max-w-none rounded-t-2xl border-t bg-white shadow-2xl',
+        'sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:w-[380px] sm:max-w-[86vw] sm:rounded-none sm:border-l sm:border-t-0',
+        'md:w-[420px] lg:w-[360px]',
         'transition-transform duration-300 ease-out',
-        open ? 'translate-x-0' : 'translate-x-full',
+        open ? 'translate-y-0 sm:translate-x-0' : 'translate-y-full sm:translate-x-full sm:translate-y-0',
       ].join(' ')}
       aria-hidden={!open}
     >
       <div className="flex h-full flex-col">
-        <div className="flex items-start justify-between gap-3 border-b px-4 py-4">
-          <div>
+        <div className="flex items-start justify-between gap-3 border-b px-4 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)] sm:pt-4">
+          <div className="min-w-0">
             <div className="text-base font-bold leading-5 text-slate-900">
               Customer Map
             </div>
@@ -46,7 +48,7 @@ export default function Sidebar({
               Dashboard peta distribusi pelanggan air
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {onLogout && (
               <button
                 type="button"
@@ -244,7 +246,7 @@ export default function Sidebar({
           </div>
         </div>
 
-        <div className="border-t px-4 py-3 text-xs text-slate-500">
+        <div className="border-t px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 text-xs text-slate-500">
           Sidebar ini overlay di atas peta (map tetap full view).
         </div>
       </div>
