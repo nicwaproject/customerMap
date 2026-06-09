@@ -1,0 +1,139 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+.leaflet-bottom.leaflet-left {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.leaflet-bottom.leaflet-left .leaflet-control {
+  margin-bottom: 18px;
+  margin-left: 0;
+}
+
+.leaflet-bottom.leaflet-left .leaflet-control-zoom {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  border-radius: 12px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.16);
+}
+
+.leaflet-bottom.leaflet-left .leaflet-control-zoom a {
+  border-bottom: 0;
+}
+
+.leaflet-bottom.leaflet-left .leaflet-control-zoom a + a {
+  border-left: 1px solid rgba(15, 23, 42, 0.12);
+}
+
+.customer-map-popup .leaflet-popup-content-wrapper {
+  width: max-content;
+  max-width: min(320px, calc(100vw - 40px));
+}
+
+.customer-map-popup .leaflet-popup-content {
+  width: auto !important;
+  min-width: 240px;
+  max-width: min(300px, calc(100vw - 64px));
+  margin: 12px;
+}
+
+.customer-map-popup .leaflet-popup-content > div {
+  width: 100%;
+  min-width: 0;
+}
+
+.customer-label-tooltip {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 8px;
+  padding: 2px 6px;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.12);
+  color: rgba(15, 23, 42, 0.95);
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 500;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.customer-label-tooltip.leaflet-tooltip-top::before {
+  border-top-color: rgba(255, 255, 255, 0.88);
+}
+
+.customer-dot-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  overflow: visible;
+}
+
+.customer-dot-marker {
+  border-width: 1px;
+  border-style: solid;
+  border-radius: 9999px;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.customer-kelurahan-cluster-icon {
+  background: transparent;
+  border: 0;
+}
+
+.customer-kelurahan-cluster {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 150px;
+  height: 42px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1);
+  padding: 5px 10px 5px 6px;
+  box-sizing: border-box;
+  backdrop-filter: blur(2px);
+}
+
+.customer-kelurahan-cluster__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 30px;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.72);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.customer-kelurahan-cluster__label {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(15, 23, 42, 0.72);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
