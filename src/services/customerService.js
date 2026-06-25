@@ -2,6 +2,14 @@ import { supabase } from '../lib/supabase'
 import { getStatusFilterValues } from '../utils/customerStatus'
 
 const TABLE = 'pelanggan'
+const INVALID_METER_READER_VALUES = new Set([
+  '#n/a',
+  'n/a',
+  'na',
+  'null',
+  'undefined',
+  '-',
+])
 
 function toIlikePattern(q) {
   const trimmed = String(q ?? '').trim()
@@ -14,6 +22,20 @@ function applyStatusFilter(query, status) {
   const values = getStatusFilterValues(status)
   if (values.length === 0) return query
   return query.in('status', values)
+}
+
+function normalizeMeterReader(value) {
+  const trimmed = String(value ?? '').trim()
+  const normalized = trimmed.toLowerCase()
+  if (trimmed.length === 0 || normalized === 'all') return null
+  if (INVALID_METER_READER_VALUES.has(normalized)) return null
+  return trimmed
+}
+
+function applyMeterReaderFilter(query, meterReader) {
+  const value = normalizeMeterReader(meterReader)
+  if (!value) return query
+  return query.eq('pembaca_meter', value)
 }
 
 export function normalizeCustomer(row) {
@@ -39,19 +61,22 @@ export function normalizeCustomer(row) {
 export async function getCustomersByBounds({
   bounds,
   status = 'all',
+  meterReader = 'all',
   zoom = 13,
+  limit: requestedLimit,
 }) {
   if (!bounds) return { data: [], error: null }
 
   const { south, west, north, east } = bounds
 
-  let limit = 1000
-
-if (zoom >= 16) {
-  limit = 12000
-} else if (zoom >= 14) {
-  limit = 4000
-}
+  let limit = requestedLimit ?? 1000
+  if (!requestedLimit) {
+    if (zoom >= 16) {
+      limit = 12000
+    } else if (zoom >= 14) {
+      limit = 4000
+    }
+  }
 
   let q = supabase
     .from(TABLE)
@@ -78,6 +103,7 @@ if (zoom >= 16) {
     .limit(limit)
 
   q = applyStatusFilter(q, status)
+  q = applyMeterReaderFilter(q, meterReader)
 
   const { data, error } = await q
   return { data: (data ?? []).map(normalizeCustomer), error }
@@ -86,6 +112,7 @@ if (zoom >= 16) {
 export async function searchCustomers({
   query,
   status = 'all',
+  meterReader = 'all',
   limit = 25,
 }) {
   const pattern = toIlikePattern(query)
@@ -119,6 +146,7 @@ export async function searchCustomers({
     .limit(limit)
 
   textQuery = applyStatusFilter(textQuery, status)
+  textQuery = applyMeterReaderFilter(textQuery, meterReader)
 
   const { data: textRows, error: textError, count } = await textQuery
   if (textError) {
@@ -141,6 +169,7 @@ export async function searchCustomers({
     .limit(remaining)
 
   noLangQuery = applyStatusFilter(noLangQuery, status)
+  noLangQuery = applyMeterReaderFilter(noLangQuery, meterReader)
 
   const { data: noLangRows, error: noLangError } = await noLangQuery
   if (noLangError) {
@@ -206,6 +235,7 @@ export async function getNearestCustomer({
   lat,
   lng,
   status = 'all',
+  meterReader = 'all',
   maxTries = 3,
 }) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -226,6 +256,7 @@ export async function getNearestCustomer({
     const { data, error } = await getCustomersByBounds({
       bounds,
       status,
+      meterReader,
       zoom: 16,
       limit: 2000,
     })
@@ -250,4 +281,43 @@ export async function getNearestCustomer({
   }
 
   return { data: null, error: null }
+}
+
+export async function getMeterReaderOptions({
+  pageSize = 1000,
+  maxRows = 50000,
+  onPage,
+} = {}) {
+  const valuesByKey = new Map()
+
+  for (let from = 0; from < maxRows; from += pageSize) {
+    const to = Math.min(from + pageSize - 1, maxRows - 1)
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('pembaca_meter')
+      .not('pembaca_meter', 'is', null)
+      .order('pembaca_meter', { ascending: true })
+      .range(from, to)
+
+    if (error) return { data: [], error }
+
+    for (const row of data ?? []) {
+      const value = normalizeMeterReader(row.pembaca_meter)
+      if (!value) continue
+      valuesByKey.set(value.toLowerCase(), value)
+    }
+
+    const values = Array.from(valuesByKey.values()).sort((a, b) =>
+      a.localeCompare(b, 'id', { sensitivity: 'base' }),
+    )
+    onPage?.(values)
+
+    if (!data || data.length < pageSize) break
+  }
+
+  const values = Array.from(valuesByKey.values()).sort((a, b) =>
+    a.localeCompare(b, 'id', { sensitivity: 'base' }),
+  )
+
+  return { data: values, error: null }
 }

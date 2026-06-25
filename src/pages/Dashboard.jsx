@@ -14,6 +14,10 @@ export default function Dashboard({
   onClearSearch,
   statusFilter,
   onStatusFilterChange,
+  meterReaderFilter,
+  meterReaderOptions,
+  meterReaderOptionsError,
+  onMeterReaderFilterChange,
   labelMode,
   onLabelModeChange,
   selectedCustomerId,
@@ -37,6 +41,7 @@ export default function Dashboard({
         selectedCustomerId={selectedCustomerId}
         onBoundsChange={onBoundsChange}
         statusFilter={statusFilter}
+        meterReaderFilter={meterReaderFilter}
       />
 
       <button
@@ -79,6 +84,10 @@ export default function Dashboard({
         onClose={() => setSidebarOpen(false)}
         statusFilter={statusFilter}
         onStatusFilterChange={onStatusFilterChange}
+        meterReaderFilter={meterReaderFilter}
+        meterReaderOptions={meterReaderOptions}
+        meterReaderOptionsError={meterReaderOptionsError}
+        onMeterReaderFilterChange={onMeterReaderFilterChange}
         labelMode={labelMode}
         onLabelModeChange={onLabelModeChange}
         query={query}

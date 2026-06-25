@@ -2,11 +2,53 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import Dashboard from './Dashboard'
 import { useCustomersByBounds } from '../hooks/useCustomersByBounds'
-import { searchCustomers } from '../services/customerService'
+import {
+  getMeterReaderOptions,
+  searchCustomers,
+} from '../services/customerService'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
+
+const INVALID_METER_READER_VALUES = new Set([
+  '#n/a',
+  'n/a',
+  'na',
+  'null',
+  'undefined',
+  '-',
+])
+
+function normalizeMeterReaderOption(value) {
+  const trimmed = String(value ?? '').trim()
+  const normalized = trimmed.toLowerCase()
+  if (!trimmed || normalized === 'all') return null
+  if (INVALID_METER_READER_VALUES.has(normalized)) return null
+  return trimmed
+}
+
+function sortMeterReaderOptions(values) {
+  return values.sort((a, b) =>
+    a.localeCompare(b, 'id', { sensitivity: 'base' }),
+  )
+}
+
+function mergeMeterReaderOptions(current, next) {
+  const byKey = new Map()
+  for (const value of current ?? []) {
+    const normalized = normalizeMeterReaderOption(value)
+    if (normalized) byKey.set(normalized.toLowerCase(), normalized)
+  }
+  for (const value of next ?? []) {
+    const normalized = normalizeMeterReaderOption(value)
+    if (normalized) byKey.set(normalized.toLowerCase(), normalized)
+  }
+  return sortMeterReaderOptions(Array.from(byKey.values()))
+}
 
 export default function RootDashboard() {
   const [statusFilter, setStatusFilter] = useState('all')
+  const [meterReaderFilter, setMeterReaderFilter] = useState('all')
+  const [meterReaderOptions, setMeterReaderOptions] = useState([])
+  const [meterReaderOptionsError, setMeterReaderOptionsError] = useState(null)
   const [query, setQuery] = useState('')
   const [labelMode, setLabelMode] = useState('none')
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -20,6 +62,7 @@ export default function RootDashboard() {
     bounds: mapBounds,
     zoom: mapZoom,
     statusFilter,
+    meterReaderFilter,
   })
 
   const debouncedQuery = useDebouncedValue(query, 250)
@@ -29,8 +72,18 @@ export default function RootDashboard() {
   const [searchError, setSearchError] = useState(null)
 
   const fitOnChangeKey = useMemo(() => {
-    return `${statusFilter}::${query.trim().toLowerCase()}`
-  }, [statusFilter, query])
+    return `${statusFilter}::${meterReaderFilter}::${query.trim().toLowerCase()}`
+  }, [statusFilter, meterReaderFilter, query])
+
+  const displayedMeterReaderOptions = useMemo(() => {
+    return mergeMeterReaderOptions(
+      meterReaderOptions,
+      [
+        ...boundsCustomers.map((customer) => customer.pembaca_meter),
+        ...results.map((customer) => customer.pembaca_meter),
+      ],
+    )
+  }, [boundsCustomers, meterReaderOptions, results])
 
   async function onLogout() {
     await supabase.auth.signOut()
@@ -57,9 +110,38 @@ export default function RootDashboard() {
     setSelectedCustomer(null)
   }
 
+  function onMeterReaderFilterChange(nextMeterReader) {
+    setMeterReaderFilter(nextMeterReader)
+    setSelectedCustomerId(null)
+    setSelectedCustomer(null)
+  }
+
   const onBoundsChange = useCallback((bounds, zoom) => {
     setMapBounds(bounds)
     setMapZoom(zoom)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    getMeterReaderOptions({
+      onPage: (pageOptions) => {
+        if (cancelled) return
+        setMeterReaderOptions((current) =>
+          mergeMeterReaderOptions(current, pageOptions),
+        )
+      },
+    }).then(({ data, error }) => {
+      if (cancelled) return
+      setMeterReaderOptions((current) =>
+        mergeMeterReaderOptions(current, data ?? []),
+      )
+      setMeterReaderOptionsError(error ?? null)
+    })
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -75,21 +157,30 @@ export default function RootDashboard() {
     }
 
     setSearchLoading(true)
-    searchCustomers({ query: q, status: statusFilter, limit: 25 }).then(
-      ({ data, count, error }) => {
-        if (cancelled) return
-        setSearchLoading(false)
-        setSearchError(error ?? null)
-        setResults(data ?? [])
-        setResultsCount(typeof count === 'number' ? count : (data ?? []).length)
-      },
-    )
+    searchCustomers({
+      query: q,
+      status: statusFilter,
+      meterReader: meterReaderFilter,
+      limit: 25,
+    }).then(({ data, count, error }) => {
+      if (cancelled) return
+      setSearchLoading(false)
+      setSearchError(error ?? null)
+      setResults(data ?? [])
+      setResultsCount(typeof count === 'number' ? count : (data ?? []).length)
+      setMeterReaderOptions((current) =>
+        mergeMeterReaderOptions(
+          current,
+          (data ?? []).map((customer) => customer.pembaca_meter),
+        ),
+      )
+    })
 
     return () => {
       cancelled = true
       setSearchLoading(false)
     }
-  }, [debouncedQuery, statusFilter])
+  }, [debouncedQuery, statusFilter, meterReaderFilter])
 
   const customers = useMemo(() => {
     // Ensure selected customer is still renderable even if outside current bounds.
@@ -112,6 +203,10 @@ export default function RootDashboard() {
       onClearSearch={onClearSearch}
       statusFilter={statusFilter}
       onStatusFilterChange={onStatusFilterChange}
+      meterReaderFilter={meterReaderFilter}
+      meterReaderOptions={displayedMeterReaderOptions}
+      meterReaderOptionsError={meterReaderOptionsError}
+      onMeterReaderFilterChange={onMeterReaderFilterChange}
       labelMode={labelMode}
       onLabelModeChange={setLabelMode}
       selectedCustomerId={selectedCustomerId}

@@ -19,9 +19,14 @@ function computeLimitForZoom(zoom) {
   return 5000
 }
 
-export function useCustomersByBounds({ bounds, zoom, statusFilter }) {
+export function useCustomersByBounds({
+  bounds,
+  zoom,
+  statusFilter,
+  meterReaderFilter,
+}) {
   const debounced = useDebouncedValue(
-    { bounds, zoom, statusFilter },
+    { bounds, zoom, statusFilter, meterReaderFilter },
     250,
   )
 
@@ -37,6 +42,7 @@ export function useCustomersByBounds({ bounds, zoom, statusFilter }) {
     const z = Number(debounced.zoom)
     return [
       debounced.statusFilter ?? 'all',
+      debounced.meterReaderFilter ?? 'all',
       z,
       south.toFixed(5),
       west.toFixed(5),
@@ -58,6 +64,7 @@ export function useCustomersByBounds({ bounds, zoom, statusFilter }) {
     getCustomersByBounds({
       bounds: debounced.bounds,
       status: debounced.statusFilter,
+      meterReader: debounced.meterReaderFilter,
       limit,
     })
       .then(({ data, error: err }) => {
@@ -78,8 +85,13 @@ export function useCustomersByBounds({ bounds, zoom, statusFilter }) {
         if (requestIdRef.current !== rid) return
         setLoading(false)
       })
-  }, [key, debounced.bounds, debounced.zoom, debounced.statusFilter])
+  }, [
+    key,
+    debounced.bounds,
+    debounced.zoom,
+    debounced.statusFilter,
+    debounced.meterReaderFilter,
+  ])
 
   return { customers, loading, error }
 }
-

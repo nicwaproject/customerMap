@@ -20,7 +20,7 @@ import { createRoot } from 'react-dom/client'
 import L from 'leaflet'
 import 'leaflet.markercluster'
 import MarkerClusterGroup from 'react-leaflet-cluster'
-import { Check, Copy } from 'lucide-react'
+import { Check, Copy, Route, ScanEye } from 'lucide-react'
 import CustomerPopup from './popup/CustomerPopup'
 import { getNearestCustomer } from '../services/customerService'
 import { getCustomerStatusColor } from '../utils/customerStatus'
@@ -364,7 +364,12 @@ function BoundsReporter({ onChange }) {
   return null
 }
 
-function ClickNearestController({ enabled, statusFilter, onFound }) {
+function ClickNearestController({
+  enabled,
+  statusFilter,
+  meterReaderFilter,
+  onFound,
+}) {
   const map = useMapEvents({
     click: async (e) => {
       if (!enabled) return
@@ -387,6 +392,7 @@ function ClickNearestController({ enabled, statusFilter, onFound }) {
         lat,
         lng,
         status: statusFilter,
+        meterReader: meterReaderFilter,
       })
       if (!data) return
       onFound?.({
@@ -416,6 +422,10 @@ function NearestPopupContent({ nearest }) {
   const mapsHref =
     Number.isFinite(lat) && Number.isFinite(lng)
       ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+      : null
+  const streetViewHref =
+    Number.isFinite(lat) && Number.isFinite(lng)
+      ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`
       : null
 
   return (
@@ -460,15 +470,31 @@ function NearestPopupContent({ nearest }) {
           Jarak ± {Math.round(nearest.distanceMeters)} m
         </div>
       )}
-      {mapsHref && (
-        <a
-          href={mapsHref}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
-        >
-          Arahkan ke Google Maps
-        </a>
+      {(mapsHref || streetViewHref) && (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {mapsHref && (
+            <a
+              href={mapsHref}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+            >
+              <Route size={16} />
+              Rute
+            </a>
+          )}
+          {streetViewHref && (
+            <a
+              href={streetViewHref}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              <ScanEye size={16} />
+              Street View
+            </a>
+          )}
+        </div>
       )}
     </div>
   )
@@ -611,6 +637,7 @@ export default function MapView({
   selectedCustomerId,
   onBoundsChange,
   statusFilter = 'all',
+  meterReaderFilter = 'all',
 }) {
   const [showLabels, setShowLabels] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
@@ -697,6 +724,7 @@ export default function MapView({
       <ClickNearestController
         enabled
         statusFilter={statusFilter}
+        meterReaderFilter={meterReaderFilter}
         onFound={(payload) => {
           setNearest(payload)
         }}

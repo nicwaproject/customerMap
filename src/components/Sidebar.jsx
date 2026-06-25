@@ -25,6 +25,10 @@ export default function Sidebar({
   boundsError,
   searchError,
   searchLoading,
+  meterReaderFilter,
+  meterReaderOptions,
+  meterReaderOptionsError,
+  onMeterReaderFilterChange,
 }) {
   return (
     <aside
@@ -130,6 +134,29 @@ export default function Sidebar({
               </select>
             </div>
 
+            <div className="mt-3">
+              <label className="block text-xs font-medium text-slate-600">
+                Filter pembaca meter
+              </label>
+              <select
+                value={meterReaderFilter}
+                onChange={(e) => onMeterReaderFilterChange(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+              >
+                <option value="all">Semua pembaca meter</option>
+                {(meterReaderOptions ?? []).map((reader) => (
+                  <option key={reader} value={reader}>
+                    {reader}
+                  </option>
+                ))}
+              </select>
+              {meterReaderOptionsError && (
+                <div className="mt-1 text-xs text-rose-700">
+                  Gagal memuat daftar pembaca meter.
+                </div>
+              )}
+            </div>
+
             {query.trim().length > 0 && (
               <div className="mt-2">
                 {searchError && (
@@ -181,6 +208,9 @@ export default function Sidebar({
                             </div>
                             <div className="mt-1 line-clamp-2 text-xs leading-snug text-slate-500">
                               {c.alamat ?? '-'}
+                            </div>
+                            <div className="mt-1 truncate text-xs text-slate-500">
+                              Pembaca meter: {c.pembaca_meter ?? '-'}
                             </div>
                           </div>
                           {(() => {
