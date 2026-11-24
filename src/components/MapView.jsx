@@ -22,6 +22,8 @@ import 'leaflet.markercluster'
 import MarkerClusterGroup from 'react-leaflet-cluster'
 import { Check, Copy, Route, ScanEye } from 'lucide-react'
 import CustomerPopup from './popup/CustomerPopup'
+import MyLocationControl from './MyLocationControl'
+import MeterRouteLayer from './MeterRouteLayer'
 import { getNearestCustomer } from '../services/customerService'
 import { getCustomerStatusColor } from '../utils/customerStatus'
 
@@ -85,6 +87,16 @@ function getCustomerLabelOffset(customer) {
   const x = xOptions[seed % xOptions.length]
   const y = yOptions[(seed >> 3) % yOptions.length]
   return [x, y]
+}
+
+function makeRouteStopIcon(number) {
+  return L.divIcon({
+    className: 'meter-route-icon',
+    html: `<span class="meter-route-number">${number}</span>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -15],
+  })
 }
 
 function makeDotIcon(status, selected, diameter) {
@@ -198,13 +210,21 @@ function LabelVisibilityController({ labelMode, onChange }) {
 }
 
 function FocusSelectedCustomer({
+  enabled,
   selectedCustomer,
   markerRefs,
   pendingPopupCustomerKeyRef,
 }) {
   const map = useMap()
+  const lastSelectedCustomerRef = useRef(null)
   useEffect(() => {
-    if (!selectedCustomer) return
+    if (!enabled) return
+    if (!selectedCustomer) {
+      lastSelectedCustomerRef.current = null
+      return
+    }
+    if (lastSelectedCustomerRef.current === selectedCustomer) return
+    lastSelectedCustomerRef.current = selectedCustomer
     const lat = Number(selectedCustomer.latitude)
     const lng = Number(selectedCustomer.longitude)
     if (!isValidLatLng(lat, lng)) return
@@ -232,11 +252,12 @@ function FocusSelectedCustomer({
       window.clearTimeout(timeoutId)
       map.off('moveend', openSelectedPopup)
     }
-  }, [map, markerRefs, pendingPopupCustomerKeyRef, selectedCustomer])
+  }, [enabled, map, markerRefs, pendingPopupCustomerKeyRef, selectedCustomer])
   return null
 }
 
 function SearchNavigationController({
+  enabled,
   query,
   results,
   pendingPopupCustomerKeyRef,
@@ -269,6 +290,7 @@ function SearchNavigationController({
   }, [query, validResults])
 
   useEffect(() => {
+    if (!enabled) return undefined
     const q = String(query ?? '').trim()
     if (!q) {
       lastNavigationKeyRef.current = null
@@ -292,6 +314,7 @@ function SearchNavigationController({
     map.flyTo([lat, lng], zoom, { duration: 1.5 })
     return undefined
   }, [
+    enabled,
     map,
     onNavigateResult,
     pendingPopupCustomerKeyRef,
@@ -304,13 +327,13 @@ function SearchNavigationController({
   return null
 }
 
-function BoundsReporter({ onChange }) {
+function BoundsReporter({ onChange, suppressedRef }) {
   const lastKeyRef = useRef('')
   const popupOpenRef = useRef(false)
   const map = useMap()
 
   const report = useCallback(() => {
-    if (popupOpenRef.current) return
+    if (popupOpenRef.current && !suppressedRef.current) return
     if (!onChange) return
     const b = map.getBounds()
     const nextKey = [
@@ -323,6 +346,7 @@ function BoundsReporter({ onChange }) {
 
     if (lastKeyRef.current === nextKey) return
     lastKeyRef.current = nextKey
+    if (suppressedRef.current) return
 
     onChange(
       {
@@ -333,7 +357,7 @@ function BoundsReporter({ onChange }) {
       },
       map.getZoom(),
     )
-  }, [map, onChange])
+  }, [map, onChange, suppressedRef])
 
   useMapEvents({
     moveend: report,
@@ -369,7 +393,13 @@ function ClickNearestController({
   statusFilter,
   meterReaderFilter,
   onFound,
+  localCustomers,
 }) {
+  const requestVersion = useRef(0)
+  useEffect(() => {
+    requestVersion.current += 1
+    return () => { requestVersion.current += 1 }
+  }, [localCustomers])
   const map = useMapEvents({
     click: async (e) => {
       if (!enabled) return
@@ -388,13 +418,30 @@ function ClickNearestController({
 
       const lat = e.latlng?.lat
       const lng = e.latlng?.lng
+      const version = requestVersion.current
+      if (localCustomers) {
+        let nearest = null
+        let distance = Infinity
+        for (const customer of localCustomers) {
+          const customerLat = Number(customer.latitude)
+          const customerLng = Number(customer.longitude)
+          if (customer.latitude == null || customer.longitude == null || !isValidLatLng(customerLat, customerLng)) continue
+          const nextDistance = map.distance([lat, lng], [customerLat, customerLng])
+          if (nextDistance < distance) {
+            nearest = customer
+            distance = nextDistance
+          }
+        }
+        if (nearest) onFound?.({ clickLatLng: { lat, lng }, customer: nearest, distanceMeters: distance })
+        return
+      }
       const { data, distanceMeters } = await getNearestCustomer({
         lat,
         lng,
         status: statusFilter,
         meterReader: meterReaderFilter,
       })
-      if (!data) return
+      if (!data || requestVersion.current !== version) return
       onFound?.({
         clickLatLng: { lat, lng },
         customer: data,
@@ -555,6 +602,7 @@ const ClusteredCustomerMarkers = memo(function ClusteredCustomerMarkers({
   highlightedCustomerKey,
   showLabels,
   onCustomerClick,
+  routeNumbers,
 }) {
   return customerGroupsByKelurahan.map(({ kelurahan, customers: groupCustomers }) => (
     <MarkerClusterGroup
@@ -574,7 +622,7 @@ const ClusteredCustomerMarkers = memo(function ClusteredCustomerMarkers({
           (customerKey != null && customerKey === highlightedCustomerKey)
         return (
           <Marker
-            key={c.id}
+            key={c.id ?? routeNumbers?.get(c)}
             ref={(marker) => {
               if (!customerKey) return
               if (!marker) {
@@ -590,7 +638,7 @@ const ClusteredCustomerMarkers = memo(function ClusteredCustomerMarkers({
               }
             }}
             position={[lat, lng]}
-            icon={makeDotIcon(c.status, selected, BASE_DIAMETER)}
+            icon={routeNumbers ? makeRouteStopIcon(routeNumbers.get(c)) : makeDotIcon(c.status, selected, BASE_DIAMETER)}
             eventHandlers={{
               click: (e) => {
                 L.DomEvent.stopPropagation(e)
@@ -628,6 +676,12 @@ const ClusteredCustomerMarkers = memo(function ClusteredCustomerMarkers({
 })
 
 export default function MapView({
+  myLocation,
+  route,
+  routeVisible = false,
+  navigationEnabled = true,
+  localNearestOnly = false,
+  datasetKey,
   customers,
   searchQuery = '',
   searchResults = [],
@@ -643,10 +697,16 @@ export default function MapView({
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [nearest, setNearest] = useState(null)
   const [highlightedCustomerKey, setHighlightedCustomerKey] = useState(null)
+  const boundsReportSuppressedRef = useRef(false)
   const markerRefs = useRef(new Map())
   const pendingPopupCustomerKeyRef = useRef(null)
 
-  const markerCustomers = useMemo(() => customers ?? [], [customers])
+  const markerCustomers = useMemo(() => routeVisible && route
+    ? route.stops.map((stop) => stop.customer)
+    : customers ?? [], [customers, route, routeVisible])
+  const routeNumbers = useMemo(() => routeVisible && route
+    ? new Map(route.stops.map((stop, index) => [stop.customer, index + 1]))
+    : null, [route, routeVisible])
   const boundsCustomers = markerCustomers
 
   const customerGroupsByKelurahan = useMemo(() => {
@@ -714,19 +774,21 @@ export default function MapView({
       className="h-full w-full"
     >
       <ZoomControl position="bottomleft" />
+      <MyLocationControl boundsReportSuppressedRef={boundsReportSuppressedRef} myLocation={myLocation} />
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
       <InitialViewController onDone={() => setIsInitialLoad(false)} />
-      <BoundsReporter onChange={onBoundsChange} />
+      <BoundsReporter onChange={onBoundsChange} suppressedRef={boundsReportSuppressedRef} />
       <ClickNearestController
         enabled
+        localCustomers={localNearestOnly ? markerCustomers : null}
         statusFilter={statusFilter}
         meterReaderFilter={meterReaderFilter}
         onFound={(payload) => {
-          setNearest(payload)
+          setNearest({ ...payload, datasetKey })
         }}
       />
       <DynamicFitBoundsController
@@ -740,11 +802,13 @@ export default function MapView({
         disabledBecauseSelected={Boolean(selectedCustomer)}
       />
       <FocusSelectedCustomer
+        enabled={navigationEnabled}
         selectedCustomer={selectedCustomer}
         markerRefs={markerRefs}
         pendingPopupCustomerKeyRef={pendingPopupCustomerKeyRef}
       />
       <SearchNavigationController
+        enabled={navigationEnabled}
         query={searchQuery}
         results={searchResults}
         pendingPopupCustomerKeyRef={pendingPopupCustomerKeyRef}
@@ -752,7 +816,9 @@ export default function MapView({
       />
       <LabelVisibilityController labelMode={labelMode} onChange={setShowLabels} />
 
+      <MeterRouteLayer route={route} visible={routeVisible} boundsReportSuppressedRef={boundsReportSuppressedRef} />
       <ClusteredCustomerMarkers
+        routeNumbers={routeNumbers}
         customerGroupsByKelurahan={customerGroupsByKelurahan}
         labelMode={labelMode}
         markerRefs={markerRefs}
@@ -764,7 +830,7 @@ export default function MapView({
       />
 
       <NearestPopupController
-        nearest={nearest}
+        nearest={nearest?.datasetKey === datasetKey ? nearest : null}
         onNearestClose={handleNearestPopupClose}
       />
     </MapContainer>

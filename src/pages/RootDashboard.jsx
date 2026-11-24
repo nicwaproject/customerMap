@@ -6,6 +6,8 @@ import {
   getMeterReaderOptions,
   searchCustomers,
 } from '../services/customerService'
+import { useMyLocation } from '../hooks/useMyLocation'
+import { useBacaMeter } from '../hooks/useBacaMeter'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 
 const INVALID_METER_READER_VALUES = new Set([
@@ -45,9 +47,13 @@ function mergeMeterReaderOptions(current, next) {
 }
 
 export default function RootDashboard() {
+  const [activeWorkspace, setActiveWorkspace] = useState('cs')
+  const myLocation = useMyLocation()
+  const bacaMeter = useBacaMeter({ requestLocation: myLocation.requestLocation })
   const [statusFilter, setStatusFilter] = useState('all')
   const [meterReaderFilter, setMeterReaderFilter] = useState('all')
   const [meterReaderOptions, setMeterReaderOptions] = useState([])
+  const [meterReaderOptionsLoading, setMeterReaderOptionsLoading] = useState(true)
   const [meterReaderOptionsError, setMeterReaderOptionsError] = useState(null)
   const [query, setQuery] = useState('')
   const [labelMode, setLabelMode] = useState('none')
@@ -117,14 +123,16 @@ export default function RootDashboard() {
   }
 
   const onBoundsChange = useCallback((bounds, zoom) => {
+    if (activeWorkspace !== 'cs') return
     setMapBounds(bounds)
     setMapZoom(zoom)
-  }, [])
+  }, [activeWorkspace])
 
   useEffect(() => {
     let cancelled = false
 
     getMeterReaderOptions({
+      maxRows: Infinity,
       onPage: (pageOptions) => {
         if (cancelled) return
         setMeterReaderOptions((current) =>
@@ -137,6 +145,11 @@ export default function RootDashboard() {
         mergeMeterReaderOptions(current, data ?? []),
       )
       setMeterReaderOptionsError(error ?? null)
+      setMeterReaderOptionsLoading(false)
+    }).catch((error) => {
+      if (cancelled) return
+      setMeterReaderOptionsError(error)
+      setMeterReaderOptionsLoading(false)
     })
 
     return () => {
@@ -192,6 +205,15 @@ export default function RootDashboard() {
 
   return (
     <Dashboard
+      myLocation={myLocation}
+      activeWorkspace={activeWorkspace}
+      onWorkspaceChange={setActiveWorkspace}
+      bacaMeter={{
+        ...bacaMeter,
+        options: displayedMeterReaderOptions,
+        optionsError: meterReaderOptionsError,
+        optionsLoading: meterReaderOptionsLoading,
+      }}
       customers={customers}
       results={results}
       resultsCount={resultsCount}

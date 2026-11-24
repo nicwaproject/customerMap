@@ -3,6 +3,10 @@ import MapView from '../components/MapView.jsx'
 import Sidebar from '../components/Sidebar.jsx'
 
 export default function Dashboard({
+  myLocation,
+  activeWorkspace,
+  onWorkspaceChange,
+  bacaMeter,
   customers,
   results,
   resultsCount,
@@ -29,16 +33,26 @@ export default function Dashboard({
   onBoundsChange,
   onLogout,
 }) {
+  const isBacaMeter = activeWorkspace === 'baca-meter'
+  const hasBacaMeterResults = isBacaMeter && bacaMeter.customers !== null
+  const displayedCustomers = hasBacaMeterResults ? bacaMeter.customers : customers
+
   return (
     <div className="relative h-[100dvh] w-screen overflow-hidden bg-slate-100 text-slate-900">
       <MapView
-        customers={customers}
+        myLocation={myLocation}
+        route={bacaMeter.route}
+        routeVisible={isBacaMeter}
+        navigationEnabled={!isBacaMeter}
+        localNearestOnly={isBacaMeter}
+        datasetKey={hasBacaMeterResults ? bacaMeter.customers : 'cs'}
+        customers={displayedCustomers}
         searchQuery={query}
         searchResults={results}
         labelMode={labelMode}
-        fitOnChangeKey={fitOnChangeKey}
+        fitOnChangeKey={isBacaMeter ? null : fitOnChangeKey}
         selectedCustomer={selectedCustomer}
-        selectedCustomerId={selectedCustomerId}
+        selectedCustomerId={hasBacaMeterResults ? null : selectedCustomerId}
         onBoundsChange={onBoundsChange}
         statusFilter={statusFilter}
         meterReaderFilter={meterReaderFilter}
@@ -80,6 +94,9 @@ export default function Dashboard({
       )}
 
       <Sidebar
+        activeWorkspace={activeWorkspace}
+        onWorkspaceChange={onWorkspaceChange}
+        bacaMeter={bacaMeter}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         statusFilter={statusFilter}

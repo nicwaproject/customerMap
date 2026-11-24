@@ -287,10 +287,11 @@ export async function getMeterReaderOptions({
   pageSize = 1000,
   maxRows = 50000,
   onPage,
+  preserveValues = false,
 } = {}) {
   const valuesByKey = new Map()
 
-  for (let from = 0; from < maxRows; from += pageSize) {
+  for (let from = 0; from < maxRows;) {
     const to = Math.min(from + pageSize - 1, maxRows - 1)
     const { data, error } = await supabase
       .from(TABLE)
@@ -302,9 +303,11 @@ export async function getMeterReaderOptions({
     if (error) return { data: [], error }
 
     for (const row of data ?? []) {
-      const value = normalizeMeterReader(row.pembaca_meter)
-      if (!value) continue
-      valuesByKey.set(value.toLowerCase(), value)
+      const value = preserveValues
+        ? row.pembaca_meter
+        : normalizeMeterReader(row.pembaca_meter)
+      if (!value || !value.trim()) continue
+      valuesByKey.set(preserveValues ? value : value.toLowerCase(), value)
     }
 
     const values = Array.from(valuesByKey.values()).sort((a, b) =>
@@ -312,7 +315,8 @@ export async function getMeterReaderOptions({
     )
     onPage?.(values)
 
-    if (!data || data.length < pageSize) break
+    if (!data?.length) break
+    from += data.length
   }
 
   const values = Array.from(valuesByKey.values()).sort((a, b) =>
@@ -320,4 +324,40 @@ export async function getMeterReaderOptions({
   )
 
   return { data: values, error: null }
+}
+
+// Match the selected calendar day across all months/years, on the database.
+export async function getCustomersByReadingDate({ date, meterReader = '', signal }) {
+  // Read the date input directly; parsing it as a JS Date can shift the local day.
+  const day = /^\d{4,}-\d{2}-\d{2}$/.test(date ?? '') ? Number(date.split('-')[2]) : NaN
+  if (!Number.isInteger(day) || day < 1 || day > 31) {
+    return { data: [], error: new Error('Tanggal baca tidak valid.') }
+  }
+  const customers = []
+  const pageSize = 1000
+  let from = 0
+  while (true) {
+    let query = supabase
+      .rpc('get_customers_by_reading_day', {
+        p_day: day,
+        p_meter_reader: meterReader || null,
+      })
+      .select('no_langganan,status,nama,alamat,pembaca_meter,jalan,kelurahan,kecamatan,no_body_m,gol,latitude,longitude')
+      .order('no_langganan', { ascending: true })
+      .range(from, from + pageSize - 1)
+    if (signal) query = query.abortSignal(signal)
+    const { data, error } = await query
+    if (error) return { data: [], error }
+    if (!Array.isArray(data)) {
+      return { data: [], error: Object.assign(
+        new Error('Invalid customer response: expected an array of rows.'),
+        { code: 'INVALID_CUSTOMER_RESPONSE' },
+      ) }
+    }
+    if (data.length === 0) break
+    customers.push(...data.map(normalizeCustomer))
+    // Advance by the actual response size, including servers with a lower row cap.
+    from += data.length
+  }
+  return { data: customers, error: null }
 }
